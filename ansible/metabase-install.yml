@@ -1,0 +1,208 @@
+---
+# metabase-install.yml
+# Ansible playbook for Metabase installation on NixOS
+# Based on: https://github.com/chuboe/chuboe-bi-metabase
+#
+# Prerequisites:
+#   1. NixOS configured with metabase-prerequisites.nix and rebuilt
+#   2. PostgreSQL service running
+#
+# Usage:
+#   ansible-playbook -i inventory.ini metabase-install.yml --connection=local
+#
+# After this playbook completes:
+#   1. Add metabase-service.nix to your configuration.nix imports
+#   2. Run: sudo nixos-rebuild switch
+
+- name: Install Metabase BI on NixOS
+  hosts: metabase_servers
+  become: true
+  vars_files:
+    - vars/metabase.yml
+
+  tasks:
+    #########################################################################
+    # Pre-flight checks
+    #########################################################################
+    - name: Verify PostgreSQL is running
+      ansible.builtin.systemd:
+        name: postgresql
+        state: started
+      register: postgres_status
+
+    - name: Verify Java is available
+      ansible.builtin.command: java -version
+      register: java_version
+      changed_when: false
+
+    - name: Display Java version
+      ansible.builtin.debug:
+        msg: "{{ java_version.stderr_lines }}"
+
+    #########################################################################
+    # Read database credentials from .pgpass (created by NixOS)
+    # Format: hostname:port:database:username:password
+    #########################################################################
+    - name: Read database credentials from .pgpass
+      ansible.builtin.set_fact:
+        _pgpass_parts: "{{ lookup('file', '/home/' + metabase_user + '/.pgpass').split(':') }}"
+
+    - name: Set database variables from .pgpass
+      ansible.builtin.set_fact:
+        db_host: "{{ _pgpass_parts[0] }}"
+        db_port: "{{ _pgpass_parts[1] | int }}"
+        db_name: "{{ _pgpass_parts[2] }}"
+        db_user: "{{ _pgpass_parts[3] }}"
+        db_password: "{{ _pgpass_parts[4] }}"
+
+    #########################################################################
+    # Set PostgreSQL password
+    #########################################################################
+    - name: Set postgres user password
+      become_user: postgres
+      ansible.builtin.command: >
+        psql -c "ALTER USER postgres PASSWORD '{{ db_admin_password }}';"
+      changed_when: true
+      no_log: true
+
+    #########################################################################
+    # Fetch latest Metabase version from GitHub
+    #########################################################################
+    - name: Get latest Metabase release from GitHub
+      ansible.builtin.uri:
+        url: "{{ metabase_github_api }}"
+        return_content: true
+        headers:
+          Accept: "application/vnd.github.v3+json"
+      register: github_release
+
+    - name: Set Metabase version from GitHub
+      ansible.builtin.set_fact:
+        metabase_version: "{{ github_release.json.tag_name | regex_replace('^v', '') }}"
+
+    - name: Display Metabase version to install
+      ansible.builtin.debug:
+        msg: "Installing Metabase version: {{ metabase_version }}"
+
+    - name: Set download URL
+      ansible.builtin.set_fact:
+        metabase_download_url: "https://downloads.metabase.com/v{{ metabase_version }}/metabase.jar"
+
+    #########################################################################
+    # Download Metabase JAR
+    #########################################################################
+    - name: Check if Metabase JAR already exists
+      ansible.builtin.stat:
+        path: "{{ metabase_install_dir }}/{{ metabase_jar_file }}"
+      register: metabase_jar
+
+    - name: Download Metabase JAR (this may take a while)
+      ansible.builtin.get_url:
+        url: "{{ metabase_download_url }}"
+        dest: "{{ metabase_install_dir }}/{{ metabase_jar_file }}"
+        owner: "{{ metabase_user }}"
+        group: "{{ metabase_group }}"
+        mode: '0644'
+        timeout: 600
+      when: not metabase_jar.stat.exists
+
+    - name: Set ownership of Metabase directory
+      ansible.builtin.file:
+        path: "{{ metabase_install_dir }}"
+        owner: "{{ metabase_user }}"
+        group: "{{ metabase_group }}"
+        recurse: true
+
+    #########################################################################
+    # Database Setup - Create Metabase metadata database
+    #########################################################################
+    - name: Create metabase database role
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: psql -c "CREATE ROLE {{ db_user }} LOGIN PASSWORD '{{ db_password }}'"
+      register: create_role
+      changed_when: "'CREATE ROLE' in create_role.stdout"
+      failed_when: false  # Ignore if role already exists
+
+    - name: Create metabase database
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: psql -c "CREATE DATABASE {{ db_name }} OWNER {{ db_user }}"
+      register: create_db
+      changed_when: "'CREATE DATABASE' in create_db.stdout"
+      failed_when: false  # Ignore if database already exists
+
+    - name: Grant privileges on metabase database
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: psql -c "GRANT ALL PRIVILEGES ON DATABASE {{ db_name }} TO {{ db_user }}"
+      changed_when: true
+
+    #########################################################################
+    # Create start script
+    #########################################################################
+    - name: Create metabase-start.sh script
+      ansible.builtin.copy:
+        dest: "{{ metabase_install_dir }}/metabase-start.sh"
+        owner: "{{ metabase_user }}"
+        group: "{{ metabase_group }}"
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          # metabase-start.sh - Start Metabase with PostgreSQL backend
+          #
+          # Environment variables are set by the systemd service
+
+          cd "$(dirname "$0")"
+
+          exec java -jar metabase.jar
+
+    #########################################################################
+    # Store version info
+    #########################################################################
+    - name: Write version file
+      ansible.builtin.copy:
+        dest: "{{ metabase_install_dir }}/VERSION"
+        owner: "{{ metabase_user }}"
+        group: "{{ metabase_group }}"
+        mode: '0644'
+        content: |
+          {{ metabase_version }}
+
+    #########################################################################
+    # Verify Installation
+    #########################################################################
+    - name: Verify database connection
+      become_user: "{{ metabase_user }}"
+      ansible.builtin.command:
+        cmd: psql -d {{ db_name }} -U {{ db_user }} -h {{ db_host }} -p {{ db_port }} -c ''
+      register: db_connection
+      failed_when: db_connection.rc != 0
+
+    #########################################################################
+    # Installation complete - next steps
+    #########################################################################
+    - name: Display next steps
+      ansible.builtin.debug:
+        msg:
+          - "=============================================="
+          - "Metabase installation complete!"
+          - "=============================================="
+          - ""
+          - "Version: {{ metabase_version }}"
+          - ""
+          - "Next steps:"
+          - "  1. Add metabase-service.nix to your configuration.nix:"
+          - "     imports = ["
+          - "       ./metabase-prerequisites.nix"
+          - "       ./metabase-service.nix"
+          - "     ];"
+          - ""
+          - "  2. Rebuild NixOS:"
+          - "     sudo nixos-rebuild switch"
+          - ""
+          - "  3. Access Metabase at:"
+          - "     http://{{ ansible_host }}:{{ metabase_port }}/"
+          - ""
+          - "  4. Complete the initial setup wizard in the browser"
+          - "=============================================="

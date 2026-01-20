@@ -1,0 +1,50 @@
+---
+# metabase.yml - Ansible variables for Metabase installation
+# Based on: https://github.com/chuboe/chuboe-bi-metabase
+#
+# IMPORTANT: Change passwords before production use!
+# Consider using ansible-vault for sensitive values
+
+#############################################################################
+# Metabase Configuration
+#############################################################################
+# Version is fetched dynamically from GitHub releases API at install time
+# See: https://github.com/metabase/metabase/releases
+metabase_github_api: "https://api.github.com/repos/metabase/metabase/releases/latest"
+
+metabase_user: "metabase"
+metabase_group: "metabase"
+metabase_install_dir: "/opt/metabase"
+metabase_jar_file: "metabase.jar"
+
+#############################################################################
+# Web Server Configuration
+#############################################################################
+metabase_port: 3000
+metabase_host: "0.0.0.0"
+
+#############################################################################
+# Database Configuration (Metabase's own metadata database)
+# Note: db_host, db_port, db_name, db_user, db_password are read from
+# /home/metabase/.pgpass (auto-generated on first boot by NixOS, persists
+# across rebuilds - no need to configure here)
+#############################################################################
+db_type: "postgres"
+
+# PostgreSQL admin user (for creating database)
+db_admin_user: "postgres"
+db_admin_password: "postgres"  # CHANGE THIS!
+
+#############################################################################
+# Java Configuration
+#############################################################################
+# NixOS will set JAVA_HOME, but we define it explicitly for scripts
+java_home: "/run/current-system/sw"
+
+#############################################################################
+# Metabase Environment Variables
+# These are passed to the Java process
+#############################################################################
+# MB_DB_TYPE is set to postgres to use PostgreSQL for metadata
+# MB_DB_DBNAME, MB_DB_PORT, MB_DB_USER, MB_DB_PASS, MB_DB_HOST
+# are read from .pgpass and set in the service
