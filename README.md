@@ -12,7 +12,16 @@ This repository automates Metabase installation using a 3-phase approach:
 
 ## Quick Start
 
-### Automated Installation
+Container creation is handled by the `container-management` module:
+
+```bash
+# From container-management directory:
+./launch.sh configs/metabase.conf mb-01
+```
+
+This creates container `mb-01` with proxy port `9101`, installs Metabase, and waits for ready. Access at `http://<host>:9101/`.
+
+### Manual Installation (inside existing container)
 
 Run the full installation:
 
