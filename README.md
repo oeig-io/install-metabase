@@ -10,46 +10,7 @@ This repository automates Metabase installation using a 3-phase approach:
 2. **Phase 2 - Ansible Orchestration** (`ansible/metabase-install.yml`): Download latest Metabase JAR, configure database
 3. **Phase 3 - NixOS Service** (`metabase-service.nix`): systemd service with auto-start and firewall rules
 
-## Quick Start
-
-Container creation is handled by the `container-management` module:
-
-```bash
-# From container-management directory:
-./launch.sh configs/metabase.conf mb-01
-```
-
-This creates container `mb-01` with proxy port `9101`, installs Metabase, and waits for ready. Access at `http://<host>:9101/`.
-
-### Manual Installation (inside existing container)
-
-Run the full installation:
-
-```bash
-./install.sh
-```
-
-### Manual Installation
-
-1. Add prerequisites to NixOS configuration:
-   ```bash
-   # Edit /etc/nixos/configuration.nix to add:
-   imports = [ ./metabase-prerequisites.nix ];
-   sudo nixos-rebuild switch
-   ```
-
-2. Run Ansible playbook:
-   ```bash
-   cd ansible
-   ansible-playbook -i inventory.ini metabase-install.yml --connection=local
-   ```
-
-3. Add service to NixOS configuration:
-   ```bash
-   # Edit /etc/nixos/configuration.nix to add:
-   imports = [ ./metabase-prerequisites.nix ./metabase-service.nix ];
-   sudo nixos-rebuild switch
-   ```
+> **🔗 Reference**: See [github.com/oeig-io/container-management](https://github.com/oeig-io/container-management) for deployment standards and orchestration instructions.
 
 ## Access
 
@@ -131,3 +92,7 @@ To connect Metabase to an iDempiere database for reporting:
 
 - https://github.com/chuboe/chuboe-bi-metabase
 - https://www.metabase.com/docs/latest/installation-and-operation/running-metabase-on-debian
+
+## References
+
+- [github.com/oeig-io/container-management](https://github.com/oeig-io/container-management) - Deployment standards and orchestration
