@@ -24,7 +24,7 @@ if grep -q "metabase-prerequisites.nix" /etc/nixos/configuration.nix; then
 else
     sed -i 's|./incus.nix|./incus.nix\n    '"$SCRIPT_DIR"'/metabase-prerequisites.nix|' /etc/nixos/configuration.nix
 fi
-sudo nixos-rebuild switch
+sudo nixos-rebuild switch 2>&1 | tail -n 20
 
 # Phase 2: Ansible Installation
 echo ""
@@ -41,7 +41,7 @@ if grep -q "metabase-service.nix" /etc/nixos/configuration.nix; then
 else
     sed -i 's|metabase-prerequisites.nix|metabase-prerequisites.nix\n    '"$SCRIPT_DIR"'/metabase-service.nix|' /etc/nixos/configuration.nix
 fi
-sudo nixos-rebuild switch
+sudo nixos-rebuild switch 2>&1 | tail -n 20
 
 echo ""
 echo "=== Metabase Installation Complete ==="
