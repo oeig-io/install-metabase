@@ -96,3 +96,4 @@ To connect Metabase to an iDempiere database for reporting:
 ## References
 
 - [github.com/oeig-io/container-management](https://github.com/oeig-io/container-management) - Deployment standards and orchestration
+
