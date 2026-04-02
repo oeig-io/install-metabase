@@ -58,6 +58,9 @@ in {
     ln -sf ${pkgs.bash}/bin/bash /bin/bash
   '';
 
+  # enable netbird - must bring up manually
+  services.netbird.enable = true;
+
   # Create .pgpass for metabase user (required for psqlm and other pg tools)
   # Password is generated randomly on first run and persisted across rebuilds
   system.activationScripts.pgpass = ''
